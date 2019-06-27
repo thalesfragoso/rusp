@@ -17,9 +17,9 @@ use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Record<'a> {
-    pub version: Cow<'a, str>,
-    pub to_id: Cow<'a, str>,
-    pub from_id: Cow<'a, str>,
+    pub version: &'a str,
+    pub to_id: &'a str,
+    pub from_id: &'a str,
     pub payload_security: usp_record::mod_Record::PayloadSecurity,
     pub mac_signature: Cow<'a, [u8]>,
     pub sender_cert: Cow<'a, [u8]>,
@@ -31,9 +31,9 @@ impl<'a> MessageRead<'a> for Record<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.version = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.to_id = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(26) => msg.from_id = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.version = r.read_string(bytes)?,
+                Ok(18) => msg.to_id = r.read_string(bytes)?,
+                Ok(26) => msg.from_id = r.read_string(bytes)?,
                 Ok(32) => msg.payload_security = r.read_enum(bytes)?,
                 Ok(42) => msg.mac_signature = r.read_bytes(bytes).map(Cow::Borrowed)?,
                 Ok(50) => msg.sender_cert = r.read_bytes(bytes).map(Cow::Borrowed)?,
@@ -50,9 +50,9 @@ impl<'a> MessageRead<'a> for Record<'a> {
 impl<'a> MessageWrite for Record<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.version == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.version).len()) }
-        + if self.to_id == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.to_id).len()) }
-        + if self.from_id == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.from_id).len()) }
+        + if self.version == "" { 0 } else { 1 + sizeof_len((&self.version).len()) }
+        + if self.to_id == "" { 0 } else { 1 + sizeof_len((&self.to_id).len()) }
+        + if self.from_id == "" { 0 } else { 1 + sizeof_len((&self.from_id).len()) }
         + if self.payload_security == usp_record::mod_Record::PayloadSecurity::PLAINTEXT { 0 } else { 1 + sizeof_varint(*(&self.payload_security) as u64) }
         + if self.mac_signature == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.mac_signature).len()) }
         + if self.sender_cert == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.sender_cert).len()) }
@@ -63,9 +63,9 @@ impl<'a> MessageWrite for Record<'a> {
     }    }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.version != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.version))?; }
-        if self.to_id != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.to_id))?; }
-        if self.from_id != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.from_id))?; }
+        if self.version != "" { w.write_with_tag(10, |w| w.write_string(&**&self.version))?; }
+        if self.to_id != "" { w.write_with_tag(18, |w| w.write_string(&**&self.to_id))?; }
+        if self.from_id != "" { w.write_with_tag(26, |w| w.write_string(&**&self.from_id))?; }
         if self.payload_security != usp_record::mod_Record::PayloadSecurity::PLAINTEXT { w.write_with_tag(32, |w| w.write_enum(*&self.payload_security as i32))?; }
         if self.mac_signature != Cow::Borrowed(b"") { w.write_with_tag(42, |w| w.write_bytes(&**&self.mac_signature))?; }
         if self.sender_cert != Cow::Borrowed(b"") { w.write_with_tag(50, |w| w.write_bytes(&**&self.sender_cert))?; }

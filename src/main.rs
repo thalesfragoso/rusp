@@ -184,9 +184,9 @@ fn encode_msg_body_buf(typ: MsgType) -> Vec<u8> {
     use quick_protobuf::serialize_into_vec;
 
     match typ {
-        MsgType::USPError { code, message } => {
-            serialize_into_vec(&usp_generator::usp_simple_error(code, message))
-        }
+        MsgType::USPError { code, message } => serialize_into_vec(
+            &usp_generator::usp_simple_error(code, message.as_ref().map(|s| s.as_str())),
+        ),
         MsgType::USPGet { paths } => {
             let paths = paths.join(" ");
             let v: Vec<&str> = serde_json::from_str(&paths).unwrap();
@@ -201,7 +201,7 @@ fn encode_msg_body_buf(typ: MsgType) -> Vec<u8> {
             sub_id,
             send_resp,
             typ,
-        } => serialize_into_vec(&usp_generator::usp_notify_request(&sub_id, send_resp, typ)),
+        } => serialize_into_vec(&usp_generator::usp_notify_request(&sub_id, send_resp, &typ)),
         MsgType::USPNotifyResp { sub_id } => {
             serialize_into_vec(&usp_generator::usp_notify_response(&sub_id))
         }
@@ -234,7 +234,7 @@ fn encode_msg(msgid: String, filename: Option<PathBuf>, typ: MsgType) {
 
     let encoded_body = encode_msg_body_buf(typ);
     let body: rusp::usp::Body = deserialize_from_slice(&encoded_body).unwrap();
-    usp_generator::usp_msg(msgid, body)
+    usp_generator::usp_msg(&msgid, body)
         .write_message(&mut writer)
         .expect("Failed encoding USP Msg");
 

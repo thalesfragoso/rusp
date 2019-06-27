@@ -19,11 +19,11 @@ use crate::usp_types::NotifyType;
 /// ```
 /// use rusp::usp_generator::{usp_msg, usp_get_request};
 /// let newmsg = usp_msg(
-///     "fancymsgid".to_string(),
+///     "fancymsgid",
 ///     usp_get_request(&["Device.", "Device.DeviceInfo."]),
 /// );
 /// ```
-pub fn usp_msg(msg_id: String, body: Body) -> Msg {
+pub fn usp_msg<'a>(msg_id: &'a str, body: Body<'a>) -> Msg<'a> {
     use crate::usp::mod_Body::OneOfmsg_body::*;
     use crate::usp::mod_Header::MsgType::*;
     use crate::usp::mod_Request::OneOfreq_type::*;
@@ -60,7 +60,7 @@ pub fn usp_msg(msg_id: String, body: Body) -> Msg {
 
     Msg {
         header: Some(Header {
-            msg_id: std::borrow::Cow::from(msg_id),
+            msg_id: msg_id,
             msg_type,
         }),
         body: Some(body),
@@ -91,50 +91,47 @@ pub fn usp_msg(msg_id: String, body: Body) -> Msg {
 /// use rusp::usp_generator::usp_simple_error;
 /// let err = usp_simple_error(8000, None);
 /// ```
-pub fn usp_simple_error<'a>(code: u32, message: Option<String>) -> Body<'a> {
+pub fn usp_simple_error<'a>(code: u32, message: Option<&'a str>) -> Body<'a> {
     use crate::usp::mod_Body::OneOfmsg_body::*;
 
-    let err_msg = message.unwrap_or_else(|| {
-        match code {
-            7000 => "Message failed",
-            7001 => "Message not supported",
-            7002 => "Request denied (no reason specified)",
-            7003 => "Internal error",
-            7004 => "Invalid arguments",
-            7005 => "Resources exceeded",
-            7006 => "Permission denied",
-            7007 => "Invalid configuration",
-            7008 => "Invalid path syntax",
-            7009 => "Parameter action failed",
-            7010 => "Unsupported parameter",
-            7011 => "Invalid type",
-            7012 => "Invalid value",
-            7013 => "Attempt to update non-writeable parameter",
-            7014 => "Value conflict",
-            7015 => "Operation error",
-            7016 => "Object does not exist",
-            7017 => "Object could not be created",
-            7018 => "Object is not a table",
-            7019 => "Attempt to create non-creatable Object",
-            7020 => "Object could not be updated",
-            7021 => "Required parameter failed",
-            7022 => "Command failure",
-            7023 => "Command canceled",
-            7024 => "Delete failure",
-            7025 => "Object exists with duplicate key",
-            7026 => "Invalid path",
-            7027 => "Invalid Command Arguments",
-            7800..=7999 => "Vendor specific",
-            _ => unreachable!(),
-        }
-        .to_string()
+    let err_msg = message.unwrap_or_else(|| match code {
+        7000 => "Message failed",
+        7001 => "Message not supported",
+        7002 => "Request denied (no reason specified)",
+        7003 => "Internal error",
+        7004 => "Invalid arguments",
+        7005 => "Resources exceeded",
+        7006 => "Permission denied",
+        7007 => "Invalid configuration",
+        7008 => "Invalid path syntax",
+        7009 => "Parameter action failed",
+        7010 => "Unsupported parameter",
+        7011 => "Invalid type",
+        7012 => "Invalid value",
+        7013 => "Attempt to update non-writeable parameter",
+        7014 => "Value conflict",
+        7015 => "Operation error",
+        7016 => "Object does not exist",
+        7017 => "Object could not be created",
+        7018 => "Object is not a table",
+        7019 => "Attempt to create non-creatable Object",
+        7020 => "Object could not be updated",
+        7021 => "Required parameter failed",
+        7022 => "Command failure",
+        7023 => "Command canceled",
+        7024 => "Delete failure",
+        7025 => "Object exists with duplicate key",
+        7026 => "Invalid path",
+        7027 => "Invalid Command Arguments",
+        7800..=7999 => "Vendor specific",
+        _ => unreachable!(),
     });
 
     Body {
         msg_body: error({
             Error {
                 err_code: code,
-                err_msg: err_msg.into(),
+                err_msg: &err_msg,
                 param_errs: [].to_vec(),
             }
         }),
@@ -163,7 +160,7 @@ pub fn usp_get_request<'a>(params: &[&'a str]) -> Body<'a> {
                 req_type: get({
                     let mut getr = Get::default();
                     for path in params {
-                        getr.param_paths.push(Cow::Borrowed(path));
+                        getr.param_paths.push(path);
                     }
                     getr
                 }),
@@ -185,14 +182,14 @@ pub fn usp_get_request<'a>(params: &[&'a str]) -> Body<'a> {
 /// ```
 /// use rusp::usp_types::NotifyType;
 /// use rusp::usp_generator::usp_notify_request;
-/// let req = usp_notify_request("", true, NotifyType::OnBoardRequest {
+/// let req = usp_notify_request("", true, &NotifyType::OnBoardRequest {
 ///     oui: "ABCABC".to_string(),
 ///     product_class: "PC".to_string(),
 ///     serial_number: "000000".to_string(),
 ///     agent_supported_protocol_versions: "1.0".to_string()
 /// });
 /// ```
-pub fn usp_notify_request(sub_id: &'_ str, send_resp: bool, typ: NotifyType) -> Body<'_> {
+pub fn usp_notify_request<'a>(sub_id: &'a str, send_resp: bool, typ: &'a NotifyType) -> Body<'a> {
     use crate::usp::mod_Body::OneOfmsg_body::*;
     use crate::usp::mod_Notify::OnBoardRequest;
     use crate::usp::mod_Notify::OneOfnotification::*;
@@ -212,11 +209,10 @@ pub fn usp_notify_request(sub_id: &'_ str, send_resp: bool, typ: NotifyType) -> 
                             serial_number,
                             agent_supported_protocol_versions,
                         } => on_board_req(OnBoardRequest {
-                            agent_supported_protocol_versions: agent_supported_protocol_versions
-                                .into(),
-                            oui: oui.into(),
-                            product_class: product_class.into(),
-                            serial_number: serial_number.into(),
+                            agent_supported_protocol_versions: agent_supported_protocol_versions,
+                            oui: oui,
+                            product_class: product_class,
+                            serial_number: serial_number,
                         }),
                     };
                     notr
@@ -263,25 +259,25 @@ pub fn usp_get_response<'a>(
                                 let mut respaths = Vec::default();
                                 for (path, params) in success {
                                     respaths.push(ResolvedPathResult {
-                                        resolved_path: Cow::Borrowed(path),
+                                        resolved_path: &path,
                                         result_params: params
                                             .into_iter()
-                                            .map(|(k, v)| (Cow::Borrowed(k), Cow::Borrowed(v)))
+                                            .map(|(k, v)| (k, v))
                                             .collect::<HashMap<_, _>>(),
                                     });
                                 }
 
                                 RequestedPathResult {
-                                    requested_path: Cow::Borrowed(path),
+                                    requested_path: &path,
                                     err_code: 0,
-                                    err_msg: Cow::Borrowed(""),
+                                    err_msg: "",
                                     resolved_path_results: respaths,
                                 }
                             }
                             Err(failure) => RequestedPathResult {
-                                requested_path: Cow::Borrowed(path),
+                                requested_path: &path,
                                 err_code: failure.0,
-                                err_msg: Cow::Borrowed(failure.1),
+                                err_msg: &failure.1,
                                 resolved_path_results: Vec::default(),
                             },
                         });
@@ -417,7 +413,7 @@ pub fn usp_notify_response(subscription_id: &'_ str) -> Body<'_> {
             Response {
                 resp_type: notify_resp({
                     NotifyResp {
-                        subscription_id: Cow::Borrowed(subscription_id),
+                        subscription_id: &subscription_id,
                     }
                 }),
             }

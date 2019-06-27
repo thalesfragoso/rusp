@@ -198,7 +198,7 @@ mod tests {
                     if let delete(a) = req.req_type {
                         assert!(a.allow_partial == true);
                         assert!(a.obj_paths.len() == 1);
-                        assert!(&a.obj_paths[0] == "Device.LocalAgent.MTP.1.WebSocket.");
+                        assert!(a.obj_paths[0] == "Device.LocalAgent.MTP.1.WebSocket.");
                     }
                 }
             }
@@ -239,7 +239,7 @@ mod tests {
         });
 
         if let no_session_context(context) = record.record_type {
-            let mut reader = BytesReader::from_bytes(&context.payload);
+            let mut reader = BytesReader::from_bytes(dbg!(&context.payload));
             let msg = Msg::from_reader(&mut reader, &context.payload).expect("Cannot read Msg");
             assert!(msg.header.is_some());
 
@@ -258,7 +258,7 @@ mod tests {
 
                     if let get(a) = req.req_type {
                         assert!(a.param_paths.len() == 1);
-                        assert!(&a.param_paths[0] == "Device.LocalAgent.MTP.1.WebSocket.");
+                        assert!(a.param_paths[0] == "Device.LocalAgent.MTP.1.WebSocket.");
                     }
                 }
             }

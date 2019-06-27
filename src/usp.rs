@@ -10,7 +10,6 @@
 
 
 use std::io::Write;
-use std::borrow::Cow;
 use std::collections::HashMap;
 use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, Result};
 use quick_protobuf::sizeofs::*;
@@ -53,7 +52,7 @@ impl<'a> MessageWrite for Msg<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Header<'a> {
-    pub msg_id: Cow<'a, str>,
+    pub msg_id: &'a str,
     pub msg_type: usp::mod_Header::MsgType,
 }
 
@@ -62,7 +61,7 @@ impl<'a> MessageRead<'a> for Header<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.msg_id = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.msg_id = r.read_string(bytes)?,
                 Ok(16) => msg.msg_type = r.read_enum(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -75,12 +74,12 @@ impl<'a> MessageRead<'a> for Header<'a> {
 impl<'a> MessageWrite for Header<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.msg_id == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.msg_id).len()) }
+        + if self.msg_id == "" { 0 } else { 1 + sizeof_len((&self.msg_id).len()) }
         + if self.msg_type == usp::mod_Header::MsgType::ERROR { 0 } else { 1 + sizeof_varint(*(&self.msg_type) as u64) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.msg_id != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.msg_id))?; }
+        if self.msg_id != "" { w.write_with_tag(10, |w| w.write_string(&**&self.msg_id))?; }
         if self.msg_type != usp::mod_Header::MsgType::ERROR { w.write_with_tag(16, |w| w.write_enum(*&self.msg_type as i32))?; }
         Ok(())
     }
@@ -405,7 +404,7 @@ impl<'a> Default for OneOfresp_type<'a> {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Error<'a> {
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
     pub param_errs: Vec<usp::mod_Error::ParamError<'a>>,
 }
 
@@ -415,7 +414,7 @@ impl<'a> MessageRead<'a> for Error<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(13) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(18) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.err_msg = r.read_string(bytes)?,
                 Ok(26) => msg.param_errs.push(r.read_message::<usp::mod_Error::ParamError>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -429,13 +428,13 @@ impl<'a> MessageWrite for Error<'a> {
     fn get_size(&self) -> usize {
         0
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
         + self.param_errs.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.err_code != 0u32 { w.write_with_tag(13, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
         for s in &self.param_errs { w.write_with_tag(26, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -443,14 +442,13 @@ impl<'a> MessageWrite for Error<'a> {
 
 pub mod mod_Error {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ParamError<'a> {
-    pub param_path: Cow<'a, str>,
+    pub param_path: &'a str,
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for ParamError<'a> {
@@ -458,9 +456,9 @@ impl<'a> MessageRead<'a> for ParamError<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.param_path = r.read_string(bytes)?,
                 Ok(21) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(26) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -472,15 +470,15 @@ impl<'a> MessageRead<'a> for ParamError<'a> {
 impl<'a> MessageWrite for ParamError<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.param_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param_path).len()) }
+        + if self.param_path == "" { 0 } else { 1 + sizeof_len((&self.param_path).len()) }
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.param_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.param_path))?; }
+        if self.param_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.param_path))?; }
         if self.err_code != 0u32 { w.write_with_tag(21, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
@@ -489,7 +487,7 @@ impl<'a> MessageWrite for ParamError<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Get<'a> {
-    pub param_paths: Vec<Cow<'a, str>>,
+    pub param_paths: Vec<&'a str>,
 }
 
 impl<'a> MessageRead<'a> for Get<'a> {
@@ -497,7 +495,7 @@ impl<'a> MessageRead<'a> for Get<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param_paths.push(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.param_paths.push(r.read_string(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -551,15 +549,14 @@ impl<'a> MessageWrite for GetResp<'a> {
 
 pub mod mod_GetResp {
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct RequestedPathResult<'a> {
-    pub requested_path: Cow<'a, str>,
+    pub requested_path: &'a str,
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
     pub resolved_path_results: Vec<usp::mod_GetResp::ResolvedPathResult<'a>>,
 }
 
@@ -568,9 +565,9 @@ impl<'a> MessageRead<'a> for RequestedPathResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.requested_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.requested_path = r.read_string(bytes)?,
                 Ok(21) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(26) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.err_msg = r.read_string(bytes)?,
                 Ok(34) => msg.resolved_path_results.push(r.read_message::<usp::mod_GetResp::ResolvedPathResult>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -583,16 +580,16 @@ impl<'a> MessageRead<'a> for RequestedPathResult<'a> {
 impl<'a> MessageWrite for RequestedPathResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.requested_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
+        + if self.requested_path == "" { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
         + self.resolved_path_results.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.requested_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
+        if self.requested_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
         if self.err_code != 0u32 { w.write_with_tag(21, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
         for s in &self.resolved_path_results { w.write_with_tag(34, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -600,8 +597,8 @@ impl<'a> MessageWrite for RequestedPathResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ResolvedPathResult<'a> {
-    pub resolved_path: Cow<'a, str>,
-    pub result_params: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub resolved_path: &'a str,
+    pub result_params: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for ResolvedPathResult<'a> {
@@ -609,9 +606,9 @@ impl<'a> MessageRead<'a> for ResolvedPathResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.resolved_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.resolved_path = r.read_string(bytes)?,
                 Ok(18) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.result_params.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -625,12 +622,12 @@ impl<'a> MessageRead<'a> for ResolvedPathResult<'a> {
 impl<'a> MessageWrite for ResolvedPathResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.resolved_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.resolved_path).len()) }
+        + if self.resolved_path == "" { 0 } else { 1 + sizeof_len((&self.resolved_path).len()) }
         + self.result_params.iter().map(|(k, v)| 1 + sizeof_len(2 + sizeof_len((k).len()) + sizeof_len((v).len()))).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.resolved_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.resolved_path))?; }
+        if self.resolved_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.resolved_path))?; }
         for (k, v) in self.result_params.iter() { w.write_with_tag(18, |w| w.write_map(2 + sizeof_len((k).len()) + sizeof_len((v).len()), 10, |w| w.write_string(&**k), 18, |w| w.write_string(&**v)))?; }
         Ok(())
     }
@@ -640,7 +637,7 @@ impl<'a> MessageWrite for ResolvedPathResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GetSupportedDM<'a> {
-    pub obj_paths: Vec<Cow<'a, str>>,
+    pub obj_paths: Vec<&'a str>,
     pub first_level_only: bool,
     pub return_commands: bool,
     pub return_events: bool,
@@ -652,7 +649,7 @@ impl<'a> MessageRead<'a> for GetSupportedDM<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_paths.push(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.obj_paths.push(r.read_string(bytes)?),
                 Ok(16) => msg.first_level_only = r.read_bool(bytes)?,
                 Ok(24) => msg.return_commands = r.read_bool(bytes)?,
                 Ok(32) => msg.return_events = r.read_bool(bytes)?,
@@ -718,15 +715,14 @@ impl<'a> MessageWrite for GetSupportedDMResp<'a> {
 
 pub mod mod_GetSupportedDMResp {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct RequestedObjectResult<'a> {
-    pub req_obj_path: Cow<'a, str>,
+    pub req_obj_path: &'a str,
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
-    pub data_model_inst_uri: Cow<'a, str>,
+    pub err_msg: &'a str,
+    pub data_model_inst_uri: &'a str,
     pub supported_objs: Vec<usp::mod_GetSupportedDMResp::SupportedObjectResult<'a>>,
 }
 
@@ -735,10 +731,10 @@ impl<'a> MessageRead<'a> for RequestedObjectResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.req_obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.req_obj_path = r.read_string(bytes)?,
                 Ok(21) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(26) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(34) => msg.data_model_inst_uri = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.err_msg = r.read_string(bytes)?,
+                Ok(34) => msg.data_model_inst_uri = r.read_string(bytes)?,
                 Ok(42) => msg.supported_objs.push(r.read_message::<usp::mod_GetSupportedDMResp::SupportedObjectResult>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -751,18 +747,18 @@ impl<'a> MessageRead<'a> for RequestedObjectResult<'a> {
 impl<'a> MessageWrite for RequestedObjectResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.req_obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.req_obj_path).len()) }
+        + if self.req_obj_path == "" { 0 } else { 1 + sizeof_len((&self.req_obj_path).len()) }
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
-        + if self.data_model_inst_uri == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.data_model_inst_uri).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.data_model_inst_uri == "" { 0 } else { 1 + sizeof_len((&self.data_model_inst_uri).len()) }
         + self.supported_objs.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.req_obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.req_obj_path))?; }
+        if self.req_obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.req_obj_path))?; }
         if self.err_code != 0u32 { w.write_with_tag(21, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
-        if self.data_model_inst_uri != Cow::Borrowed("") { w.write_with_tag(34, |w| w.write_string(&**&self.data_model_inst_uri))?; }
+        if self.err_msg != "" { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
+        if self.data_model_inst_uri != "" { w.write_with_tag(34, |w| w.write_string(&**&self.data_model_inst_uri))?; }
         for s in &self.supported_objs { w.write_with_tag(42, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -770,7 +766,7 @@ impl<'a> MessageWrite for RequestedObjectResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct SupportedObjectResult<'a> {
-    pub supported_obj_path: Cow<'a, str>,
+    pub supported_obj_path: &'a str,
     pub access: usp::mod_GetSupportedDMResp::ObjAccessType,
     pub is_multi_instance: bool,
     pub supported_commands: Vec<usp::mod_GetSupportedDMResp::SupportedCommandResult<'a>>,
@@ -783,7 +779,7 @@ impl<'a> MessageRead<'a> for SupportedObjectResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.supported_obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.supported_obj_path = r.read_string(bytes)?,
                 Ok(16) => msg.access = r.read_enum(bytes)?,
                 Ok(24) => msg.is_multi_instance = r.read_bool(bytes)?,
                 Ok(34) => msg.supported_commands.push(r.read_message::<usp::mod_GetSupportedDMResp::SupportedCommandResult>(bytes)?),
@@ -800,7 +796,7 @@ impl<'a> MessageRead<'a> for SupportedObjectResult<'a> {
 impl<'a> MessageWrite for SupportedObjectResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.supported_obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.supported_obj_path).len()) }
+        + if self.supported_obj_path == "" { 0 } else { 1 + sizeof_len((&self.supported_obj_path).len()) }
         + if self.access == usp::mod_GetSupportedDMResp::ObjAccessType::OBJ_READ_ONLY { 0 } else { 1 + sizeof_varint(*(&self.access) as u64) }
         + if self.is_multi_instance == false { 0 } else { 1 + sizeof_varint(*(&self.is_multi_instance) as u64) }
         + self.supported_commands.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
@@ -809,7 +805,7 @@ impl<'a> MessageWrite for SupportedObjectResult<'a> {
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.supported_obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.supported_obj_path))?; }
+        if self.supported_obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.supported_obj_path))?; }
         if self.access != usp::mod_GetSupportedDMResp::ObjAccessType::OBJ_READ_ONLY { w.write_with_tag(16, |w| w.write_enum(*&self.access as i32))?; }
         if self.is_multi_instance != false { w.write_with_tag(24, |w| w.write_bool(*&self.is_multi_instance))?; }
         for s in &self.supported_commands { w.write_with_tag(34, |w| w.write_message(s))?; }
@@ -821,7 +817,7 @@ impl<'a> MessageWrite for SupportedObjectResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct SupportedParamResult<'a> {
-    pub param_name: Cow<'a, str>,
+    pub param_name: &'a str,
     pub access: usp::mod_GetSupportedDMResp::ParamAccessType,
 }
 
@@ -830,7 +826,7 @@ impl<'a> MessageRead<'a> for SupportedParamResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param_name = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.param_name = r.read_string(bytes)?,
                 Ok(16) => msg.access = r.read_enum(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -843,12 +839,12 @@ impl<'a> MessageRead<'a> for SupportedParamResult<'a> {
 impl<'a> MessageWrite for SupportedParamResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.param_name == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param_name).len()) }
+        + if self.param_name == "" { 0 } else { 1 + sizeof_len((&self.param_name).len()) }
         + if self.access == usp::mod_GetSupportedDMResp::ParamAccessType::PARAM_READ_ONLY { 0 } else { 1 + sizeof_varint(*(&self.access) as u64) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.param_name != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.param_name))?; }
+        if self.param_name != "" { w.write_with_tag(10, |w| w.write_string(&**&self.param_name))?; }
         if self.access != usp::mod_GetSupportedDMResp::ParamAccessType::PARAM_READ_ONLY { w.write_with_tag(16, |w| w.write_enum(*&self.access as i32))?; }
         Ok(())
     }
@@ -856,9 +852,9 @@ impl<'a> MessageWrite for SupportedParamResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct SupportedCommandResult<'a> {
-    pub command_name: Cow<'a, str>,
-    pub input_arg_names: Vec<Cow<'a, str>>,
-    pub output_arg_names: Vec<Cow<'a, str>>,
+    pub command_name: &'a str,
+    pub input_arg_names: Vec<&'a str>,
+    pub output_arg_names: Vec<&'a str>,
 }
 
 impl<'a> MessageRead<'a> for SupportedCommandResult<'a> {
@@ -866,9 +862,9 @@ impl<'a> MessageRead<'a> for SupportedCommandResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.command_name = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.input_arg_names.push(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(26) => msg.output_arg_names.push(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.command_name = r.read_string(bytes)?,
+                Ok(18) => msg.input_arg_names.push(r.read_string(bytes)?),
+                Ok(26) => msg.output_arg_names.push(r.read_string(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -880,13 +876,13 @@ impl<'a> MessageRead<'a> for SupportedCommandResult<'a> {
 impl<'a> MessageWrite for SupportedCommandResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.command_name == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.command_name).len()) }
+        + if self.command_name == "" { 0 } else { 1 + sizeof_len((&self.command_name).len()) }
         + self.input_arg_names.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
         + self.output_arg_names.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.command_name != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.command_name))?; }
+        if self.command_name != "" { w.write_with_tag(10, |w| w.write_string(&**&self.command_name))?; }
         for s in &self.input_arg_names { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         for s in &self.output_arg_names { w.write_with_tag(26, |w| w.write_string(&**s))?; }
         Ok(())
@@ -895,8 +891,8 @@ impl<'a> MessageWrite for SupportedCommandResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct SupportedEventResult<'a> {
-    pub event_name: Cow<'a, str>,
-    pub arg_names: Vec<Cow<'a, str>>,
+    pub event_name: &'a str,
+    pub arg_names: Vec<&'a str>,
 }
 
 impl<'a> MessageRead<'a> for SupportedEventResult<'a> {
@@ -904,8 +900,8 @@ impl<'a> MessageRead<'a> for SupportedEventResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.event_name = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.arg_names.push(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.event_name = r.read_string(bytes)?,
+                Ok(18) => msg.arg_names.push(r.read_string(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -917,12 +913,12 @@ impl<'a> MessageRead<'a> for SupportedEventResult<'a> {
 impl<'a> MessageWrite for SupportedEventResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.event_name == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.event_name).len()) }
+        + if self.event_name == "" { 0 } else { 1 + sizeof_len((&self.event_name).len()) }
         + self.arg_names.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.event_name != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.event_name))?; }
+        if self.event_name != "" { w.write_with_tag(10, |w| w.write_string(&**&self.event_name))?; }
         for s in &self.arg_names { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         Ok(())
     }
@@ -1005,7 +1001,7 @@ impl<'a> From<&'a str> for ObjAccessType {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GetInstances<'a> {
-    pub obj_paths: Vec<Cow<'a, str>>,
+    pub obj_paths: Vec<&'a str>,
     pub first_level_only: bool,
 }
 
@@ -1014,7 +1010,7 @@ impl<'a> MessageRead<'a> for GetInstances<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_paths.push(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.obj_paths.push(r.read_string(bytes)?),
                 Ok(16) => msg.first_level_only = r.read_bool(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1071,15 +1067,14 @@ impl<'a> MessageWrite for GetInstancesResp<'a> {
 
 pub mod mod_GetInstancesResp {
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct RequestedPathResult<'a> {
-    pub requested_path: Cow<'a, str>,
+    pub requested_path: &'a str,
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
     pub curr_insts: Vec<usp::mod_GetInstancesResp::CurrInstance<'a>>,
 }
 
@@ -1088,9 +1083,9 @@ impl<'a> MessageRead<'a> for RequestedPathResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.requested_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.requested_path = r.read_string(bytes)?,
                 Ok(21) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(26) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.err_msg = r.read_string(bytes)?,
                 Ok(34) => msg.curr_insts.push(r.read_message::<usp::mod_GetInstancesResp::CurrInstance>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1103,16 +1098,16 @@ impl<'a> MessageRead<'a> for RequestedPathResult<'a> {
 impl<'a> MessageWrite for RequestedPathResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.requested_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
+        + if self.requested_path == "" { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
         + self.curr_insts.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.requested_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
+        if self.requested_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
         if self.err_code != 0u32 { w.write_with_tag(21, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
         for s in &self.curr_insts { w.write_with_tag(34, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -1120,8 +1115,8 @@ impl<'a> MessageWrite for RequestedPathResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct CurrInstance<'a> {
-    pub instantiated_obj_path: Cow<'a, str>,
-    pub unique_keys: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub instantiated_obj_path: &'a str,
+    pub unique_keys: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for CurrInstance<'a> {
@@ -1129,9 +1124,9 @@ impl<'a> MessageRead<'a> for CurrInstance<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.instantiated_obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.instantiated_obj_path = r.read_string(bytes)?,
                 Ok(18) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.unique_keys.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -1145,12 +1140,12 @@ impl<'a> MessageRead<'a> for CurrInstance<'a> {
 impl<'a> MessageWrite for CurrInstance<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.instantiated_obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.instantiated_obj_path).len()) }
+        + if self.instantiated_obj_path == "" { 0 } else { 1 + sizeof_len((&self.instantiated_obj_path).len()) }
         + self.unique_keys.iter().map(|(k, v)| 1 + sizeof_len(2 + sizeof_len((k).len()) + sizeof_len((v).len()))).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.instantiated_obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.instantiated_obj_path))?; }
+        if self.instantiated_obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.instantiated_obj_path))?; }
         for (k, v) in self.unique_keys.iter() { w.write_with_tag(18, |w| w.write_map(2 + sizeof_len((k).len()) + sizeof_len((v).len()), 10, |w| w.write_string(&**k), 18, |w| w.write_string(&**v)))?; }
         Ok(())
     }
@@ -1160,7 +1155,7 @@ impl<'a> MessageWrite for CurrInstance<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GetSupportedProtocol<'a> {
-    pub controller_supported_protocol_versions: Cow<'a, str>,
+    pub controller_supported_protocol_versions: &'a str,
 }
 
 impl<'a> MessageRead<'a> for GetSupportedProtocol<'a> {
@@ -1168,7 +1163,7 @@ impl<'a> MessageRead<'a> for GetSupportedProtocol<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.controller_supported_protocol_versions = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.controller_supported_protocol_versions = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -1180,18 +1175,18 @@ impl<'a> MessageRead<'a> for GetSupportedProtocol<'a> {
 impl<'a> MessageWrite for GetSupportedProtocol<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.controller_supported_protocol_versions == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.controller_supported_protocol_versions).len()) }
+        + if self.controller_supported_protocol_versions == "" { 0 } else { 1 + sizeof_len((&self.controller_supported_protocol_versions).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.controller_supported_protocol_versions != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.controller_supported_protocol_versions))?; }
+        if self.controller_supported_protocol_versions != "" { w.write_with_tag(10, |w| w.write_string(&**&self.controller_supported_protocol_versions))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct GetSupportedProtocolResp<'a> {
-    pub agent_supported_protocol_versions: Cow<'a, str>,
+    pub agent_supported_protocol_versions: &'a str,
 }
 
 impl<'a> MessageRead<'a> for GetSupportedProtocolResp<'a> {
@@ -1199,7 +1194,7 @@ impl<'a> MessageRead<'a> for GetSupportedProtocolResp<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.agent_supported_protocol_versions = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.agent_supported_protocol_versions = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -1211,11 +1206,11 @@ impl<'a> MessageRead<'a> for GetSupportedProtocolResp<'a> {
 impl<'a> MessageWrite for GetSupportedProtocolResp<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.agent_supported_protocol_versions == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.agent_supported_protocol_versions).len()) }
+        + if self.agent_supported_protocol_versions == "" { 0 } else { 1 + sizeof_len((&self.agent_supported_protocol_versions).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.agent_supported_protocol_versions != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.agent_supported_protocol_versions))?; }
+        if self.agent_supported_protocol_versions != "" { w.write_with_tag(10, |w| w.write_string(&**&self.agent_supported_protocol_versions))?; }
         Ok(())
     }
 }
@@ -1257,12 +1252,11 @@ impl<'a> MessageWrite for Add<'a> {
 
 pub mod mod_Add {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct CreateObject<'a> {
-    pub obj_path: Cow<'a, str>,
+    pub obj_path: &'a str,
     pub param_settings: Vec<usp::mod_Add::CreateParamSetting<'a>>,
 }
 
@@ -1271,7 +1265,7 @@ impl<'a> MessageRead<'a> for CreateObject<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.obj_path = r.read_string(bytes)?,
                 Ok(18) => msg.param_settings.push(r.read_message::<usp::mod_Add::CreateParamSetting>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1284,12 +1278,12 @@ impl<'a> MessageRead<'a> for CreateObject<'a> {
 impl<'a> MessageWrite for CreateObject<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
+        + if self.obj_path == "" { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
         + self.param_settings.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
+        if self.obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
         for s in &self.param_settings { w.write_with_tag(18, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -1297,8 +1291,8 @@ impl<'a> MessageWrite for CreateObject<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct CreateParamSetting<'a> {
-    pub param: Cow<'a, str>,
-    pub value: Cow<'a, str>,
+    pub param: &'a str,
+    pub value: &'a str,
     pub required: bool,
 }
 
@@ -1307,8 +1301,8 @@ impl<'a> MessageRead<'a> for CreateParamSetting<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.value = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.param = r.read_string(bytes)?,
+                Ok(18) => msg.value = r.read_string(bytes)?,
                 Ok(24) => msg.required = r.read_bool(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1321,14 +1315,14 @@ impl<'a> MessageRead<'a> for CreateParamSetting<'a> {
 impl<'a> MessageWrite for CreateParamSetting<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.param == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param).len()) }
-        + if self.value == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.value).len()) }
+        + if self.param == "" { 0 } else { 1 + sizeof_len((&self.param).len()) }
+        + if self.value == "" { 0 } else { 1 + sizeof_len((&self.value).len()) }
         + if self.required == false { 0 } else { 1 + sizeof_varint(*(&self.required) as u64) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.param != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
-        if self.value != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.value))?; }
+        if self.param != "" { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
+        if self.value != "" { w.write_with_tag(18, |w| w.write_string(&**&self.value))?; }
         if self.required != false { w.write_with_tag(24, |w| w.write_bool(*&self.required))?; }
         Ok(())
     }
@@ -1369,12 +1363,11 @@ impl<'a> MessageWrite for AddResp<'a> {
 
 pub mod mod_AddResp {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct CreatedObjectResult<'a> {
-    pub requested_path: Cow<'a, str>,
+    pub requested_path: &'a str,
     pub oper_status: Option<usp::mod_AddResp::mod_CreatedObjectResult::OperationStatus<'a>>,
 }
 
@@ -1383,7 +1376,7 @@ impl<'a> MessageRead<'a> for CreatedObjectResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.requested_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.requested_path = r.read_string(bytes)?,
                 Ok(18) => msg.oper_status = Some(r.read_message::<usp::mod_AddResp::mod_CreatedObjectResult::OperationStatus>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1396,12 +1389,12 @@ impl<'a> MessageRead<'a> for CreatedObjectResult<'a> {
 impl<'a> MessageWrite for CreatedObjectResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.requested_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
+        + if self.requested_path == "" { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
         + self.oper_status.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.requested_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
+        if self.requested_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
         if let Some(ref s) = self.oper_status { w.write_with_tag(18, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -1450,14 +1443,13 @@ impl<'a> MessageWrite for OperationStatus<'a> {
 
 pub mod mod_OperationStatus {
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OperationFailure<'a> {
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for OperationFailure<'a> {
@@ -1466,7 +1458,7 @@ impl<'a> MessageRead<'a> for OperationFailure<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(13) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(18) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -1479,21 +1471,21 @@ impl<'a> MessageWrite for OperationFailure<'a> {
     fn get_size(&self) -> usize {
         0
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.err_code != 0u32 { w.write_with_tag(13, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OperationSuccess<'a> {
-    pub instantiated_path: Cow<'a, str>,
+    pub instantiated_path: &'a str,
     pub param_errs: Vec<usp::mod_AddResp::mod_CreatedObjectResult::mod_OperationStatus::ParameterError<'a>>,
-    pub unique_keys: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub unique_keys: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for OperationSuccess<'a> {
@@ -1501,10 +1493,10 @@ impl<'a> MessageRead<'a> for OperationSuccess<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.instantiated_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.instantiated_path = r.read_string(bytes)?,
                 Ok(18) => msg.param_errs.push(r.read_message::<usp::mod_AddResp::mod_CreatedObjectResult::mod_OperationStatus::ParameterError>(bytes)?),
                 Ok(26) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.unique_keys.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -1518,13 +1510,13 @@ impl<'a> MessageRead<'a> for OperationSuccess<'a> {
 impl<'a> MessageWrite for OperationSuccess<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.instantiated_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.instantiated_path).len()) }
+        + if self.instantiated_path == "" { 0 } else { 1 + sizeof_len((&self.instantiated_path).len()) }
         + self.param_errs.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.unique_keys.iter().map(|(k, v)| 1 + sizeof_len(2 + sizeof_len((k).len()) + sizeof_len((v).len()))).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.instantiated_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.instantiated_path))?; }
+        if self.instantiated_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.instantiated_path))?; }
         for s in &self.param_errs { w.write_with_tag(18, |w| w.write_message(s))?; }
         for (k, v) in self.unique_keys.iter() { w.write_with_tag(26, |w| w.write_map(2 + sizeof_len((k).len()) + sizeof_len((v).len()), 10, |w| w.write_string(&**k), 18, |w| w.write_string(&**v)))?; }
         Ok(())
@@ -1533,9 +1525,9 @@ impl<'a> MessageWrite for OperationSuccess<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ParameterError<'a> {
-    pub param: Cow<'a, str>,
+    pub param: &'a str,
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for ParameterError<'a> {
@@ -1543,9 +1535,9 @@ impl<'a> MessageRead<'a> for ParameterError<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.param = r.read_string(bytes)?,
                 Ok(21) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(26) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -1557,15 +1549,15 @@ impl<'a> MessageRead<'a> for ParameterError<'a> {
 impl<'a> MessageWrite for ParameterError<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.param == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param).len()) }
+        + if self.param == "" { 0 } else { 1 + sizeof_len((&self.param).len()) }
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.param != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
+        if self.param != "" { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
         if self.err_code != 0u32 { w.write_with_tag(21, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
@@ -1592,7 +1584,7 @@ impl<'a> Default for OneOfoper_status<'a> {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Delete<'a> {
     pub allow_partial: bool,
-    pub obj_paths: Vec<Cow<'a, str>>,
+    pub obj_paths: Vec<&'a str>,
 }
 
 impl<'a> MessageRead<'a> for Delete<'a> {
@@ -1601,7 +1593,7 @@ impl<'a> MessageRead<'a> for Delete<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.allow_partial = r.read_bool(bytes)?,
-                Ok(18) => msg.obj_paths.push(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(18) => msg.obj_paths.push(r.read_string(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -1657,12 +1649,11 @@ impl<'a> MessageWrite for DeleteResp<'a> {
 
 pub mod mod_DeleteResp {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct DeletedObjectResult<'a> {
-    pub requested_path: Cow<'a, str>,
+    pub requested_path: &'a str,
     pub oper_status: Option<usp::mod_DeleteResp::mod_DeletedObjectResult::OperationStatus<'a>>,
 }
 
@@ -1671,7 +1662,7 @@ impl<'a> MessageRead<'a> for DeletedObjectResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.requested_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.requested_path = r.read_string(bytes)?,
                 Ok(18) => msg.oper_status = Some(r.read_message::<usp::mod_DeleteResp::mod_DeletedObjectResult::OperationStatus>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1684,12 +1675,12 @@ impl<'a> MessageRead<'a> for DeletedObjectResult<'a> {
 impl<'a> MessageWrite for DeletedObjectResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.requested_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
+        + if self.requested_path == "" { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
         + self.oper_status.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.requested_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
+        if self.requested_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
         if let Some(ref s) = self.oper_status { w.write_with_tag(18, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -1738,13 +1729,12 @@ impl<'a> MessageWrite for OperationStatus<'a> {
 
 pub mod mod_OperationStatus {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OperationFailure<'a> {
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for OperationFailure<'a> {
@@ -1753,7 +1743,7 @@ impl<'a> MessageRead<'a> for OperationFailure<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(13) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(18) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -1766,19 +1756,19 @@ impl<'a> MessageWrite for OperationFailure<'a> {
     fn get_size(&self) -> usize {
         0
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.err_code != 0u32 { w.write_with_tag(13, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OperationSuccess<'a> {
-    pub affected_paths: Vec<Cow<'a, str>>,
+    pub affected_paths: Vec<&'a str>,
     pub unaffected_path_errs: Vec<usp::mod_DeleteResp::mod_DeletedObjectResult::mod_OperationStatus::UnaffectedPathError<'a>>,
 }
 
@@ -1787,7 +1777,7 @@ impl<'a> MessageRead<'a> for OperationSuccess<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.affected_paths.push(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.affected_paths.push(r.read_string(bytes)?),
                 Ok(18) => msg.unaffected_path_errs.push(r.read_message::<usp::mod_DeleteResp::mod_DeletedObjectResult::mod_OperationStatus::UnaffectedPathError>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1813,9 +1803,9 @@ impl<'a> MessageWrite for OperationSuccess<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct UnaffectedPathError<'a> {
-    pub unaffected_path: Cow<'a, str>,
+    pub unaffected_path: &'a str,
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for UnaffectedPathError<'a> {
@@ -1823,9 +1813,9 @@ impl<'a> MessageRead<'a> for UnaffectedPathError<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.unaffected_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.unaffected_path = r.read_string(bytes)?,
                 Ok(21) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(26) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -1837,15 +1827,15 @@ impl<'a> MessageRead<'a> for UnaffectedPathError<'a> {
 impl<'a> MessageWrite for UnaffectedPathError<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.unaffected_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.unaffected_path).len()) }
+        + if self.unaffected_path == "" { 0 } else { 1 + sizeof_len((&self.unaffected_path).len()) }
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.unaffected_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.unaffected_path))?; }
+        if self.unaffected_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.unaffected_path))?; }
         if self.err_code != 0u32 { w.write_with_tag(21, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
@@ -1906,12 +1896,11 @@ impl<'a> MessageWrite for Set<'a> {
 
 pub mod mod_Set {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct UpdateObject<'a> {
-    pub obj_path: Cow<'a, str>,
+    pub obj_path: &'a str,
     pub param_settings: Vec<usp::mod_Set::UpdateParamSetting<'a>>,
 }
 
@@ -1920,7 +1909,7 @@ impl<'a> MessageRead<'a> for UpdateObject<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.obj_path = r.read_string(bytes)?,
                 Ok(18) => msg.param_settings.push(r.read_message::<usp::mod_Set::UpdateParamSetting>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1933,12 +1922,12 @@ impl<'a> MessageRead<'a> for UpdateObject<'a> {
 impl<'a> MessageWrite for UpdateObject<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
+        + if self.obj_path == "" { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
         + self.param_settings.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
+        if self.obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
         for s in &self.param_settings { w.write_with_tag(18, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -1946,8 +1935,8 @@ impl<'a> MessageWrite for UpdateObject<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct UpdateParamSetting<'a> {
-    pub param: Cow<'a, str>,
-    pub value: Cow<'a, str>,
+    pub param: &'a str,
+    pub value: &'a str,
     pub required: bool,
 }
 
@@ -1956,8 +1945,8 @@ impl<'a> MessageRead<'a> for UpdateParamSetting<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.value = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.param = r.read_string(bytes)?,
+                Ok(18) => msg.value = r.read_string(bytes)?,
                 Ok(24) => msg.required = r.read_bool(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -1970,14 +1959,14 @@ impl<'a> MessageRead<'a> for UpdateParamSetting<'a> {
 impl<'a> MessageWrite for UpdateParamSetting<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.param == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param).len()) }
-        + if self.value == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.value).len()) }
+        + if self.param == "" { 0 } else { 1 + sizeof_len((&self.param).len()) }
+        + if self.value == "" { 0 } else { 1 + sizeof_len((&self.value).len()) }
         + if self.required == false { 0 } else { 1 + sizeof_varint(*(&self.required) as u64) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.param != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
-        if self.value != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.value))?; }
+        if self.param != "" { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
+        if self.value != "" { w.write_with_tag(18, |w| w.write_string(&**&self.value))?; }
         if self.required != false { w.write_with_tag(24, |w| w.write_bool(*&self.required))?; }
         Ok(())
     }
@@ -2018,12 +2007,11 @@ impl<'a> MessageWrite for SetResp<'a> {
 
 pub mod mod_SetResp {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct UpdatedObjectResult<'a> {
-    pub requested_path: Cow<'a, str>,
+    pub requested_path: &'a str,
     pub oper_status: Option<usp::mod_SetResp::mod_UpdatedObjectResult::OperationStatus<'a>>,
 }
 
@@ -2032,7 +2020,7 @@ impl<'a> MessageRead<'a> for UpdatedObjectResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.requested_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.requested_path = r.read_string(bytes)?,
                 Ok(18) => msg.oper_status = Some(r.read_message::<usp::mod_SetResp::mod_UpdatedObjectResult::OperationStatus>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -2045,12 +2033,12 @@ impl<'a> MessageRead<'a> for UpdatedObjectResult<'a> {
 impl<'a> MessageWrite for UpdatedObjectResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.requested_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
+        + if self.requested_path == "" { 0 } else { 1 + sizeof_len((&self.requested_path).len()) }
         + self.oper_status.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.requested_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
+        if self.requested_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.requested_path))?; }
         if let Some(ref s) = self.oper_status { w.write_with_tag(18, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -2099,14 +2087,13 @@ impl<'a> MessageWrite for OperationStatus<'a> {
 
 pub mod mod_OperationStatus {
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OperationFailure<'a> {
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
     pub updated_inst_failures: Vec<usp::mod_SetResp::mod_UpdatedObjectResult::mod_OperationStatus::UpdatedInstanceFailure<'a>>,
 }
 
@@ -2116,7 +2103,7 @@ impl<'a> MessageRead<'a> for OperationFailure<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(13) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(18) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.err_msg = r.read_string(bytes)?,
                 Ok(26) => msg.updated_inst_failures.push(r.read_message::<usp::mod_SetResp::mod_UpdatedObjectResult::mod_OperationStatus::UpdatedInstanceFailure>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -2130,13 +2117,13 @@ impl<'a> MessageWrite for OperationFailure<'a> {
     fn get_size(&self) -> usize {
         0
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
         + self.updated_inst_failures.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.err_code != 0u32 { w.write_with_tag(13, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
         for s in &self.updated_inst_failures { w.write_with_tag(26, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -2175,7 +2162,7 @@ impl<'a> MessageWrite for OperationSuccess<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct UpdatedInstanceFailure<'a> {
-    pub affected_path: Cow<'a, str>,
+    pub affected_path: &'a str,
     pub param_errs: Vec<usp::mod_SetResp::mod_UpdatedObjectResult::mod_OperationStatus::ParameterError<'a>>,
 }
 
@@ -2184,7 +2171,7 @@ impl<'a> MessageRead<'a> for UpdatedInstanceFailure<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.affected_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.affected_path = r.read_string(bytes)?,
                 Ok(18) => msg.param_errs.push(r.read_message::<usp::mod_SetResp::mod_UpdatedObjectResult::mod_OperationStatus::ParameterError>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -2197,12 +2184,12 @@ impl<'a> MessageRead<'a> for UpdatedInstanceFailure<'a> {
 impl<'a> MessageWrite for UpdatedInstanceFailure<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.affected_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.affected_path).len()) }
+        + if self.affected_path == "" { 0 } else { 1 + sizeof_len((&self.affected_path).len()) }
         + self.param_errs.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.affected_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.affected_path))?; }
+        if self.affected_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.affected_path))?; }
         for s in &self.param_errs { w.write_with_tag(18, |w| w.write_message(s))?; }
         Ok(())
     }
@@ -2210,9 +2197,9 @@ impl<'a> MessageWrite for UpdatedInstanceFailure<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct UpdatedInstanceResult<'a> {
-    pub affected_path: Cow<'a, str>,
+    pub affected_path: &'a str,
     pub param_errs: Vec<usp::mod_SetResp::mod_UpdatedObjectResult::mod_OperationStatus::ParameterError<'a>>,
-    pub updated_params: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub updated_params: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for UpdatedInstanceResult<'a> {
@@ -2220,10 +2207,10 @@ impl<'a> MessageRead<'a> for UpdatedInstanceResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.affected_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.affected_path = r.read_string(bytes)?,
                 Ok(18) => msg.param_errs.push(r.read_message::<usp::mod_SetResp::mod_UpdatedObjectResult::mod_OperationStatus::ParameterError>(bytes)?),
                 Ok(26) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.updated_params.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2237,13 +2224,13 @@ impl<'a> MessageRead<'a> for UpdatedInstanceResult<'a> {
 impl<'a> MessageWrite for UpdatedInstanceResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.affected_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.affected_path).len()) }
+        + if self.affected_path == "" { 0 } else { 1 + sizeof_len((&self.affected_path).len()) }
         + self.param_errs.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
         + self.updated_params.iter().map(|(k, v)| 1 + sizeof_len(2 + sizeof_len((k).len()) + sizeof_len((v).len()))).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.affected_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.affected_path))?; }
+        if self.affected_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.affected_path))?; }
         for s in &self.param_errs { w.write_with_tag(18, |w| w.write_message(s))?; }
         for (k, v) in self.updated_params.iter() { w.write_with_tag(26, |w| w.write_map(2 + sizeof_len((k).len()) + sizeof_len((v).len()), 10, |w| w.write_string(&**k), 18, |w| w.write_string(&**v)))?; }
         Ok(())
@@ -2252,9 +2239,9 @@ impl<'a> MessageWrite for UpdatedInstanceResult<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ParameterError<'a> {
-    pub param: Cow<'a, str>,
+    pub param: &'a str,
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for ParameterError<'a> {
@@ -2262,9 +2249,9 @@ impl<'a> MessageRead<'a> for ParameterError<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.param = r.read_string(bytes)?,
                 Ok(21) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(26) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(26) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -2276,15 +2263,15 @@ impl<'a> MessageRead<'a> for ParameterError<'a> {
 impl<'a> MessageWrite for ParameterError<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.param == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param).len()) }
+        + if self.param == "" { 0 } else { 1 + sizeof_len((&self.param).len()) }
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.param != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
+        if self.param != "" { w.write_with_tag(10, |w| w.write_string(&**&self.param))?; }
         if self.err_code != 0u32 { w.write_with_tag(21, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(26, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
@@ -2310,10 +2297,10 @@ impl<'a> Default for OneOfoper_status<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Operate<'a> {
-    pub command: Cow<'a, str>,
-    pub command_key: Cow<'a, str>,
+    pub command: &'a str,
+    pub command_key: &'a str,
     pub send_resp: bool,
-    pub input_args: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub input_args: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for Operate<'a> {
@@ -2321,11 +2308,11 @@ impl<'a> MessageRead<'a> for Operate<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.command = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.command_key = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.command = r.read_string(bytes)?,
+                Ok(18) => msg.command_key = r.read_string(bytes)?,
                 Ok(24) => msg.send_resp = r.read_bool(bytes)?,
                 Ok(34) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.input_args.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2339,15 +2326,15 @@ impl<'a> MessageRead<'a> for Operate<'a> {
 impl<'a> MessageWrite for Operate<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.command == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.command).len()) }
-        + if self.command_key == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.command_key).len()) }
+        + if self.command == "" { 0 } else { 1 + sizeof_len((&self.command).len()) }
+        + if self.command_key == "" { 0 } else { 1 + sizeof_len((&self.command_key).len()) }
         + if self.send_resp == false { 0 } else { 1 + sizeof_varint(*(&self.send_resp) as u64) }
         + self.input_args.iter().map(|(k, v)| 1 + sizeof_len(2 + sizeof_len((k).len()) + sizeof_len((v).len()))).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.command != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.command))?; }
-        if self.command_key != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.command_key))?; }
+        if self.command != "" { w.write_with_tag(10, |w| w.write_string(&**&self.command))?; }
+        if self.command_key != "" { w.write_with_tag(18, |w| w.write_string(&**&self.command_key))?; }
         if self.send_resp != false { w.write_with_tag(24, |w| w.write_bool(*&self.send_resp))?; }
         for (k, v) in self.input_args.iter() { w.write_with_tag(34, |w| w.write_map(2 + sizeof_len((k).len()) + sizeof_len((v).len()), 10, |w| w.write_string(&**k), 18, |w| w.write_string(&**v)))?; }
         Ok(())
@@ -2387,12 +2374,11 @@ impl<'a> MessageWrite for OperateResp<'a> {
 
 pub mod mod_OperateResp {
 
-use std::borrow::Cow;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OperationResult<'a> {
-    pub executed_command: Cow<'a, str>,
+    pub executed_command: &'a str,
     pub operation_resp: usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp<'a>,
 }
 
@@ -2401,8 +2387,8 @@ impl<'a> MessageRead<'a> for OperationResult<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.executed_command = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.operation_resp = usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::req_obj_path(r.read_string(bytes).map(Cow::Borrowed)?),
+                Ok(10) => msg.executed_command = r.read_string(bytes)?,
+                Ok(18) => msg.operation_resp = usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::req_obj_path(r.read_string(bytes)?),
                 Ok(26) => msg.operation_resp = usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::req_output_args(r.read_message::<usp::mod_OperateResp::mod_OperationResult::OutputArgs>(bytes)?),
                 Ok(34) => msg.operation_resp = usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::cmd_failure(r.read_message::<usp::mod_OperateResp::mod_OperationResult::CommandFailure>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2416,7 +2402,7 @@ impl<'a> MessageRead<'a> for OperationResult<'a> {
 impl<'a> MessageWrite for OperationResult<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.executed_command == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.executed_command).len()) }
+        + if self.executed_command == "" { 0 } else { 1 + sizeof_len((&self.executed_command).len()) }
         + match self.operation_resp {
             usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::req_obj_path(ref m) => 1 + sizeof_len((m).len()),
             usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::req_output_args(ref m) => 1 + sizeof_len((m).get_size()),
@@ -2425,7 +2411,7 @@ impl<'a> MessageWrite for OperationResult<'a> {
     }    }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.executed_command != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.executed_command))?; }
+        if self.executed_command != "" { w.write_with_tag(10, |w| w.write_string(&**&self.executed_command))?; }
         match self.operation_resp {            usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::req_obj_path(ref m) => { w.write_with_tag(18, |w| w.write_string(&**m))? },
             usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::req_output_args(ref m) => { w.write_with_tag(26, |w| w.write_message(m))? },
             usp::mod_OperateResp::mod_OperationResult::OneOfoperation_resp::cmd_failure(ref m) => { w.write_with_tag(34, |w| w.write_message(m))? },
@@ -2436,13 +2422,12 @@ impl<'a> MessageWrite for OperationResult<'a> {
 
 pub mod mod_OperationResult {
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OutputArgs<'a> {
-    pub output_args: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub output_args: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for OutputArgs<'a> {
@@ -2451,7 +2436,7 @@ impl<'a> MessageRead<'a> for OutputArgs<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(10) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.output_args.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2477,7 +2462,7 @@ impl<'a> MessageWrite for OutputArgs<'a> {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct CommandFailure<'a> {
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for CommandFailure<'a> {
@@ -2486,7 +2471,7 @@ impl<'a> MessageRead<'a> for CommandFailure<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(13) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(18) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -2499,19 +2484,19 @@ impl<'a> MessageWrite for CommandFailure<'a> {
     fn get_size(&self) -> usize {
         0
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.err_code != 0u32 { w.write_with_tag(13, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum OneOfoperation_resp<'a> {
-    req_obj_path(Cow<'a, str>),
+    req_obj_path(&'a str),
     req_output_args(usp::mod_OperateResp::mod_OperationResult::OutputArgs<'a>),
     cmd_failure(usp::mod_OperateResp::mod_OperationResult::CommandFailure<'a>),
     None,
@@ -2529,7 +2514,7 @@ impl<'a> Default for OneOfoperation_resp<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Notify<'a> {
-    pub subscription_id: Cow<'a, str>,
+    pub subscription_id: &'a str,
     pub send_resp: bool,
     pub notification: usp::mod_Notify::OneOfnotification<'a>,
 }
@@ -2539,7 +2524,7 @@ impl<'a> MessageRead<'a> for Notify<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.subscription_id = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.subscription_id = r.read_string(bytes)?,
                 Ok(16) => msg.send_resp = r.read_bool(bytes)?,
                 Ok(26) => msg.notification = usp::mod_Notify::OneOfnotification::event(r.read_message::<usp::mod_Notify::Event>(bytes)?),
                 Ok(34) => msg.notification = usp::mod_Notify::OneOfnotification::value_change(r.read_message::<usp::mod_Notify::ValueChange>(bytes)?),
@@ -2558,7 +2543,7 @@ impl<'a> MessageRead<'a> for Notify<'a> {
 impl<'a> MessageWrite for Notify<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.subscription_id == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.subscription_id).len()) }
+        + if self.subscription_id == "" { 0 } else { 1 + sizeof_len((&self.subscription_id).len()) }
         + if self.send_resp == false { 0 } else { 1 + sizeof_varint(*(&self.send_resp) as u64) }
         + match self.notification {
             usp::mod_Notify::OneOfnotification::event(ref m) => 1 + sizeof_len((m).get_size()),
@@ -2571,7 +2556,7 @@ impl<'a> MessageWrite for Notify<'a> {
     }    }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.subscription_id != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.subscription_id))?; }
+        if self.subscription_id != "" { w.write_with_tag(10, |w| w.write_string(&**&self.subscription_id))?; }
         if self.send_resp != false { w.write_with_tag(16, |w| w.write_bool(*&self.send_resp))?; }
         match self.notification {            usp::mod_Notify::OneOfnotification::event(ref m) => { w.write_with_tag(26, |w| w.write_message(m))? },
             usp::mod_Notify::OneOfnotification::value_change(ref m) => { w.write_with_tag(34, |w| w.write_message(m))? },
@@ -2586,15 +2571,14 @@ impl<'a> MessageWrite for Notify<'a> {
 
 pub mod mod_Notify {
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Event<'a> {
-    pub obj_path: Cow<'a, str>,
-    pub event_name: Cow<'a, str>,
-    pub params: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub obj_path: &'a str,
+    pub event_name: &'a str,
+    pub params: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for Event<'a> {
@@ -2602,10 +2586,10 @@ impl<'a> MessageRead<'a> for Event<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.event_name = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.obj_path = r.read_string(bytes)?,
+                Ok(18) => msg.event_name = r.read_string(bytes)?,
                 Ok(26) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.params.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2619,14 +2603,14 @@ impl<'a> MessageRead<'a> for Event<'a> {
 impl<'a> MessageWrite for Event<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
-        + if self.event_name == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.event_name).len()) }
+        + if self.obj_path == "" { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
+        + if self.event_name == "" { 0 } else { 1 + sizeof_len((&self.event_name).len()) }
         + self.params.iter().map(|(k, v)| 1 + sizeof_len(2 + sizeof_len((k).len()) + sizeof_len((v).len()))).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
-        if self.event_name != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.event_name))?; }
+        if self.obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
+        if self.event_name != "" { w.write_with_tag(18, |w| w.write_string(&**&self.event_name))?; }
         for (k, v) in self.params.iter() { w.write_with_tag(26, |w| w.write_map(2 + sizeof_len((k).len()) + sizeof_len((v).len()), 10, |w| w.write_string(&**k), 18, |w| w.write_string(&**v)))?; }
         Ok(())
     }
@@ -2634,8 +2618,8 @@ impl<'a> MessageWrite for Event<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ValueChange<'a> {
-    pub param_path: Cow<'a, str>,
-    pub param_value: Cow<'a, str>,
+    pub param_path: &'a str,
+    pub param_value: &'a str,
 }
 
 impl<'a> MessageRead<'a> for ValueChange<'a> {
@@ -2643,8 +2627,8 @@ impl<'a> MessageRead<'a> for ValueChange<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.param_path = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.param_value = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.param_path = r.read_string(bytes)?,
+                Ok(18) => msg.param_value = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -2656,21 +2640,21 @@ impl<'a> MessageRead<'a> for ValueChange<'a> {
 impl<'a> MessageWrite for ValueChange<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.param_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param_path).len()) }
-        + if self.param_value == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.param_value).len()) }
+        + if self.param_path == "" { 0 } else { 1 + sizeof_len((&self.param_path).len()) }
+        + if self.param_value == "" { 0 } else { 1 + sizeof_len((&self.param_value).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.param_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.param_path))?; }
-        if self.param_value != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.param_value))?; }
+        if self.param_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.param_path))?; }
+        if self.param_value != "" { w.write_with_tag(18, |w| w.write_string(&**&self.param_value))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ObjectCreation<'a> {
-    pub obj_path: Cow<'a, str>,
-    pub unique_keys: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub obj_path: &'a str,
+    pub unique_keys: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for ObjectCreation<'a> {
@@ -2678,9 +2662,9 @@ impl<'a> MessageRead<'a> for ObjectCreation<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.obj_path = r.read_string(bytes)?,
                 Ok(18) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.unique_keys.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2694,12 +2678,12 @@ impl<'a> MessageRead<'a> for ObjectCreation<'a> {
 impl<'a> MessageWrite for ObjectCreation<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
+        + if self.obj_path == "" { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
         + self.unique_keys.iter().map(|(k, v)| 1 + sizeof_len(2 + sizeof_len((k).len()) + sizeof_len((v).len()))).sum::<usize>()
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
+        if self.obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
         for (k, v) in self.unique_keys.iter() { w.write_with_tag(18, |w| w.write_map(2 + sizeof_len((k).len()) + sizeof_len((v).len()), 10, |w| w.write_string(&**k), 18, |w| w.write_string(&**v)))?; }
         Ok(())
     }
@@ -2707,7 +2691,7 @@ impl<'a> MessageWrite for ObjectCreation<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct ObjectDeletion<'a> {
-    pub obj_path: Cow<'a, str>,
+    pub obj_path: &'a str,
 }
 
 impl<'a> MessageRead<'a> for ObjectDeletion<'a> {
@@ -2715,7 +2699,7 @@ impl<'a> MessageRead<'a> for ObjectDeletion<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.obj_path = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -2727,20 +2711,20 @@ impl<'a> MessageRead<'a> for ObjectDeletion<'a> {
 impl<'a> MessageWrite for ObjectDeletion<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
+        + if self.obj_path == "" { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
+        if self.obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
         Ok(())
     }
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OperationComplete<'a> {
-    pub obj_path: Cow<'a, str>,
-    pub command_name: Cow<'a, str>,
-    pub command_key: Cow<'a, str>,
+    pub obj_path: &'a str,
+    pub command_name: &'a str,
+    pub command_key: &'a str,
     pub operation_resp: usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp<'a>,
 }
 
@@ -2749,9 +2733,9 @@ impl<'a> MessageRead<'a> for OperationComplete<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.obj_path = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.command_name = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(26) => msg.command_key = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.obj_path = r.read_string(bytes)?,
+                Ok(18) => msg.command_name = r.read_string(bytes)?,
+                Ok(26) => msg.command_key = r.read_string(bytes)?,
                 Ok(34) => msg.operation_resp = usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp::req_output_args(r.read_message::<usp::mod_Notify::mod_OperationComplete::OutputArgs>(bytes)?),
                 Ok(42) => msg.operation_resp = usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp::cmd_failure(r.read_message::<usp::mod_Notify::mod_OperationComplete::CommandFailure>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2765,9 +2749,9 @@ impl<'a> MessageRead<'a> for OperationComplete<'a> {
 impl<'a> MessageWrite for OperationComplete<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.obj_path == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
-        + if self.command_name == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.command_name).len()) }
-        + if self.command_key == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.command_key).len()) }
+        + if self.obj_path == "" { 0 } else { 1 + sizeof_len((&self.obj_path).len()) }
+        + if self.command_name == "" { 0 } else { 1 + sizeof_len((&self.command_name).len()) }
+        + if self.command_key == "" { 0 } else { 1 + sizeof_len((&self.command_key).len()) }
         + match self.operation_resp {
             usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp::req_output_args(ref m) => 1 + sizeof_len((m).get_size()),
             usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp::cmd_failure(ref m) => 1 + sizeof_len((m).get_size()),
@@ -2775,9 +2759,9 @@ impl<'a> MessageWrite for OperationComplete<'a> {
     }    }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.obj_path != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
-        if self.command_name != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.command_name))?; }
-        if self.command_key != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.command_key))?; }
+        if self.obj_path != "" { w.write_with_tag(10, |w| w.write_string(&**&self.obj_path))?; }
+        if self.command_name != "" { w.write_with_tag(18, |w| w.write_string(&**&self.command_name))?; }
+        if self.command_key != "" { w.write_with_tag(26, |w| w.write_string(&**&self.command_key))?; }
         match self.operation_resp {            usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp::req_output_args(ref m) => { w.write_with_tag(34, |w| w.write_message(m))? },
             usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp::cmd_failure(ref m) => { w.write_with_tag(42, |w| w.write_message(m))? },
             usp::mod_Notify::mod_OperationComplete::OneOfoperation_resp::None => {},
@@ -2787,13 +2771,12 @@ impl<'a> MessageWrite for OperationComplete<'a> {
 
 pub mod mod_OperationComplete {
 
-use std::borrow::Cow;
 use std::collections::HashMap;
 use super::*;
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OutputArgs<'a> {
-    pub output_args: HashMap<Cow<'a, str>, Cow<'a, str>>,
+    pub output_args: HashMap<&'a str, &'a str>,
 }
 
 impl<'a> MessageRead<'a> for OutputArgs<'a> {
@@ -2802,7 +2785,7 @@ impl<'a> MessageRead<'a> for OutputArgs<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(10) => {
-                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?), |r, bytes| Ok(r.read_string(bytes).map(Cow::Borrowed)?))?;
+                    let (key, value) = r.read_map(bytes, |r, bytes| Ok(r.read_string(bytes)?), |r, bytes| Ok(r.read_string(bytes)?))?;
                     msg.output_args.insert(key, value);
                 }
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -2828,7 +2811,7 @@ impl<'a> MessageWrite for OutputArgs<'a> {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct CommandFailure<'a> {
     pub err_code: u32,
-    pub err_msg: Cow<'a, str>,
+    pub err_msg: &'a str,
 }
 
 impl<'a> MessageRead<'a> for CommandFailure<'a> {
@@ -2837,7 +2820,7 @@ impl<'a> MessageRead<'a> for CommandFailure<'a> {
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(13) => msg.err_code = r.read_fixed32(bytes)?,
-                Ok(18) => msg.err_msg = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.err_msg = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -2850,12 +2833,12 @@ impl<'a> MessageWrite for CommandFailure<'a> {
     fn get_size(&self) -> usize {
         0
         + if self.err_code == 0u32 { 0 } else { 1 + 4 }
-        + if self.err_msg == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
+        + if self.err_msg == "" { 0 } else { 1 + sizeof_len((&self.err_msg).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
         if self.err_code != 0u32 { w.write_with_tag(13, |w| w.write_fixed32(*&self.err_code))?; }
-        if self.err_msg != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
+        if self.err_msg != "" { w.write_with_tag(18, |w| w.write_string(&**&self.err_msg))?; }
         Ok(())
     }
 }
@@ -2877,10 +2860,10 @@ impl<'a> Default for OneOfoperation_resp<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct OnBoardRequest<'a> {
-    pub oui: Cow<'a, str>,
-    pub product_class: Cow<'a, str>,
-    pub serial_number: Cow<'a, str>,
-    pub agent_supported_protocol_versions: Cow<'a, str>,
+    pub oui: &'a str,
+    pub product_class: &'a str,
+    pub serial_number: &'a str,
+    pub agent_supported_protocol_versions: &'a str,
 }
 
 impl<'a> MessageRead<'a> for OnBoardRequest<'a> {
@@ -2888,10 +2871,10 @@ impl<'a> MessageRead<'a> for OnBoardRequest<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.oui = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(18) => msg.product_class = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(26) => msg.serial_number = r.read_string(bytes).map(Cow::Borrowed)?,
-                Ok(34) => msg.agent_supported_protocol_versions = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.oui = r.read_string(bytes)?,
+                Ok(18) => msg.product_class = r.read_string(bytes)?,
+                Ok(26) => msg.serial_number = r.read_string(bytes)?,
+                Ok(34) => msg.agent_supported_protocol_versions = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -2903,17 +2886,17 @@ impl<'a> MessageRead<'a> for OnBoardRequest<'a> {
 impl<'a> MessageWrite for OnBoardRequest<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.oui == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.oui).len()) }
-        + if self.product_class == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.product_class).len()) }
-        + if self.serial_number == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.serial_number).len()) }
-        + if self.agent_supported_protocol_versions == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.agent_supported_protocol_versions).len()) }
+        + if self.oui == "" { 0 } else { 1 + sizeof_len((&self.oui).len()) }
+        + if self.product_class == "" { 0 } else { 1 + sizeof_len((&self.product_class).len()) }
+        + if self.serial_number == "" { 0 } else { 1 + sizeof_len((&self.serial_number).len()) }
+        + if self.agent_supported_protocol_versions == "" { 0 } else { 1 + sizeof_len((&self.agent_supported_protocol_versions).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.oui != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.oui))?; }
-        if self.product_class != Cow::Borrowed("") { w.write_with_tag(18, |w| w.write_string(&**&self.product_class))?; }
-        if self.serial_number != Cow::Borrowed("") { w.write_with_tag(26, |w| w.write_string(&**&self.serial_number))?; }
-        if self.agent_supported_protocol_versions != Cow::Borrowed("") { w.write_with_tag(34, |w| w.write_string(&**&self.agent_supported_protocol_versions))?; }
+        if self.oui != "" { w.write_with_tag(10, |w| w.write_string(&**&self.oui))?; }
+        if self.product_class != "" { w.write_with_tag(18, |w| w.write_string(&**&self.product_class))?; }
+        if self.serial_number != "" { w.write_with_tag(26, |w| w.write_string(&**&self.serial_number))?; }
+        if self.agent_supported_protocol_versions != "" { w.write_with_tag(34, |w| w.write_string(&**&self.agent_supported_protocol_versions))?; }
         Ok(())
     }
 }
@@ -2939,7 +2922,7 @@ impl<'a> Default for OneOfnotification<'a> {
 
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct NotifyResp<'a> {
-    pub subscription_id: Cow<'a, str>,
+    pub subscription_id: &'a str,
 }
 
 impl<'a> MessageRead<'a> for NotifyResp<'a> {
@@ -2947,7 +2930,7 @@ impl<'a> MessageRead<'a> for NotifyResp<'a> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.subscription_id = r.read_string(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.subscription_id = r.read_string(bytes)?,
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -2959,11 +2942,11 @@ impl<'a> MessageRead<'a> for NotifyResp<'a> {
 impl<'a> MessageWrite for NotifyResp<'a> {
     fn get_size(&self) -> usize {
         0
-        + if self.subscription_id == Cow::Borrowed("") { 0 } else { 1 + sizeof_len((&self.subscription_id).len()) }
+        + if self.subscription_id == "" { 0 } else { 1 + sizeof_len((&self.subscription_id).len()) }
     }
 
     fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.subscription_id != Cow::Borrowed("") { w.write_with_tag(10, |w| w.write_string(&**&self.subscription_id))?; }
+        if self.subscription_id != "" { w.write_with_tag(10, |w| w.write_string(&**&self.subscription_id))?; }
         Ok(())
     }
 }
